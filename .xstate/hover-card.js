@@ -11,9 +11,16 @@ const {
 } = actions;
 const fetchMachine = createMachine({
   id: "hover-card",
-  initial: ctx.open ? "open" : "closed",
+  initial: [{
+    cond: "isOpen",
+    target: "open"
+  }, {
+    target: "closed"
+  }],
   context: {
+    "isOpen": false,
     "!isPointer": false,
+    "isControlled && isOpen": false,
     "!isPointer": false
   },
   on: {
@@ -61,6 +68,10 @@ const fetchMachine = createMachine({
     open: {
       tags: ["open"],
       activities: ["trackDismissableElement", "trackPositioning"],
+      always: {
+        cond: "isControlled && isOpen",
+        actions: ["invokeOnClose"]
+      },
       on: {
         POINTER_ENTER: {
           actions: ["setIsPointer"]
@@ -111,6 +122,8 @@ const fetchMachine = createMachine({
     })
   },
   guards: {
-    "!isPointer": ctx => ctx["!isPointer"]
+    "isOpen": ctx => ctx["isOpen"],
+    "!isPointer": ctx => ctx["!isPointer"],
+    "isControlled && isOpen": ctx => ctx["isControlled && isOpen"]
   }
 });

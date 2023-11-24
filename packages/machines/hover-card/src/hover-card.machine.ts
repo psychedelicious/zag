@@ -5,14 +5,15 @@ import { compact } from "@zag-js/utils"
 import { dom } from "./hover-card.dom"
 import type { MachineContext, MachineState, UserDefinedContext } from "./hover-card.types"
 
-const { not } = guards
+const { not, and } = guards
 
 export function machine(userContext: UserDefinedContext) {
   const ctx = compact(userContext)
   return createMachine<MachineContext, MachineState>(
     {
       id: "hover-card",
-      initial: ctx.open ? "open" : "closed",
+      initial: [{ guard: "isOpen", target: "open" }, { target: "closed" }],
+
       context: {
         openDelay: 700,
         closeDelay: 300,
@@ -70,6 +71,10 @@ export function machine(userContext: UserDefinedContext) {
         open: {
           tags: ["open"],
           activities: ["trackDismissableElement", "trackPositioning"],
+          always: {
+            guard: and("isControlled", "isOpen"),
+            actions: ["invokeOnClose"],
+          },
           on: {
             POINTER_ENTER: {
               actions: ["setIsPointer"],
@@ -116,6 +121,8 @@ export function machine(userContext: UserDefinedContext) {
     {
       guards: {
         isPointer: (ctx) => !!ctx.isPointer,
+        isControlled: (ctx, evt) => !!ctx.$$controlled && !!evt._changed,
+        isOpen: (ctx) => !!ctx.open,
       },
       activities: {
         trackPositioning(ctx) {

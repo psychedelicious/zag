@@ -46,6 +46,10 @@ interface PublicContext extends DirectionProperty, CommonProperties {
    * The user provided options used to position the popover content
    */
   positioning: PositioningOptions
+  /**
+   * Whether the hover card is controlled by the user
+   */
+  $$controlled?: boolean
 }
 
 type PrivateContext = Context<{

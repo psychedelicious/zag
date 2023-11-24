@@ -11,19 +11,23 @@ const {
 } = actions;
 const fetchMachine = createMachine({
   id: "tooltip",
-  initial: "closed",
+  initial: [{
+    cond: "isOpen",
+    target: "open"
+  }, {
+    target: "closed"
+  }],
   context: {
+    "isOpen": false,
+    "isControlled && !isOpen": false,
     "noVisibleTooltip && !hasPointerMoveOpened": false,
     "!hasPointerMoveOpened": false,
     "closeOnPointerDown": false,
+    "isControlled && isOpen": false,
     "isVisible": false,
     "isInteractive": false,
     "closeOnPointerDown": false,
     "isInteractive": false
-  },
-  on: {
-    OPEN: "open",
-    CLOSE: "closed"
   },
   on: {
     UPDATE_CONTEXT: {
@@ -33,9 +37,20 @@ const fetchMachine = createMachine({
   states: {
     closed: {
       tags: ["closed"],
-      entry: ["clearGlobalId", "invokeOnClose"],
+      always: {
+        cond: "isControlled && !isOpen",
+        actions: ["invokeOnOpen"]
+      },
+      entry: ["clearGlobalId"],
       on: {
-        FOCUS: "open",
+        OPEN: {
+          target: "open",
+          actions: ["invokeOnOpen"]
+        },
+        FOCUS: {
+          target: "open",
+          actions: ["invokeOnOpen"]
+        },
         POINTER_LEAVE: {
           actions: ["clearPointerMoveOpened"]
         },
@@ -45,7 +60,7 @@ const fetchMachine = createMachine({
         }, {
           cond: "!hasPointerMoveOpened",
           target: "open",
-          actions: ["setPointerMoveOpened"]
+          actions: ["setPointerMoveOpened", "invokeOnOpen"]
         }]
       }
     },
@@ -55,27 +70,45 @@ const fetchMachine = createMachine({
       after: {
         OPEN_DELAY: {
           target: "open",
-          actions: ["setPointerMoveOpened"]
+          actions: ["setPointerMoveOpened", "invokeOnOpen"]
         }
       },
       on: {
         POINTER_LEAVE: {
           target: "closed",
-          actions: ["clearPointerMoveOpened"]
+          actions: ["clearPointerMoveOpened", "invokeOnClose"]
         },
-        BLUR: "closed",
-        SCROLL: "closed",
-        POINTER_LOCK_CHANGE: "closed",
+        CLOSE: {
+          target: "closed",
+          actions: ["invokeOnClose"]
+        },
+        BLUR: {
+          target: "closed",
+          actions: ["invokeOnClose"]
+        },
+        SCROLL: {
+          target: "closed",
+          actions: ["invokeOnClose"]
+        },
+        POINTER_LOCK_CHANGE: {
+          target: "closed",
+          actions: ["invokeOnClose"]
+        },
         POINTER_DOWN: {
           cond: "closeOnPointerDown",
-          target: "closed"
+          target: "closed",
+          actions: ["invokeOnClose"]
         }
       }
     },
     open: {
       tags: ["open"],
+      entry: ["setGlobalId"],
+      always: {
+        cond: "isControlled && isOpen",
+        actions: ["invokeOnClose"]
+      },
       activities: ["trackEscapeKey", "trackDisabledTriggerOnSafari", "trackScroll", "trackPointerlockChange", "trackPositioning"],
-      entry: ["setGlobalId", "invokeOnOpen"],
       on: {
         POINTER_LEAVE: [{
           cond: "isVisible",
@@ -83,21 +116,37 @@ const fetchMachine = createMachine({
           actions: ["clearPointerMoveOpened"]
         }, {
           target: "closed",
-          actions: ["clearPointerMoveOpened"]
+          actions: ["clearPointerMoveOpened", "invokeOnClose"]
         }],
-        BLUR: "closed",
-        ESCAPE: "closed",
-        SCROLL: "closed",
-        POINTER_LOCK_CHANGE: "closed",
+        BLUR: {
+          target: "closed",
+          actions: ["invokeOnClose"]
+        },
+        ESCAPE: {
+          target: "closed",
+          actions: ["invokeOnClose"]
+        },
+        SCROLL: {
+          target: "closed",
+          actions: ["invokeOnClose"]
+        },
+        POINTER_LOCK_CHANGE: {
+          target: "closed",
+          actions: ["invokeOnClose"]
+        },
         "CONTENT.POINTER_LEAVE": {
           cond: "isInteractive",
           target: "closing"
         },
         POINTER_DOWN: {
           cond: "closeOnPointerDown",
-          target: "closed"
+          target: "closed",
+          actions: ["invokeOnClose"]
         },
-        CLICK: "closed",
+        CLICK: {
+          target: "closed",
+          actions: ["invokeOnClose"]
+        },
         SET_POSITIONING: {
           actions: "reposition"
         }
@@ -107,17 +156,28 @@ const fetchMachine = createMachine({
       tags: ["open"],
       activities: ["trackStore", "trackPositioning"],
       after: {
-        CLOSE_DELAY: "closed"
+        CLOSE_DELAY: {
+          target: "closed",
+          actions: ["invokeOnClose"]
+        }
       },
       on: {
-        FORCE_CLOSE: "closed",
+        OPEN: {
+          target: "open",
+          actions: ["invokeOnOpen"]
+        },
+        CLOSE: {
+          target: "closed",
+          actions: ["invokeOnClose"]
+        },
         POINTER_MOVE: {
           target: "open",
-          actions: ["setPointerMoveOpened"]
+          actions: ["setPointerMoveOpened", "invokeOnOpen"]
         },
         "CONTENT.POINTER_MOVE": {
           cond: "isInteractive",
-          target: "open"
+          target: "open",
+          actions: ["invokeOnOpen"]
         }
       }
     }
@@ -135,9 +195,12 @@ const fetchMachine = createMachine({
     CLOSE_DELAY: 500
   },
   guards: {
+    "isOpen": ctx => ctx["isOpen"],
+    "isControlled && !isOpen": ctx => ctx["isControlled && !isOpen"],
     "noVisibleTooltip && !hasPointerMoveOpened": ctx => ctx["noVisibleTooltip && !hasPointerMoveOpened"],
     "!hasPointerMoveOpened": ctx => ctx["!hasPointerMoveOpened"],
     "closeOnPointerDown": ctx => ctx["closeOnPointerDown"],
+    "isControlled && isOpen": ctx => ctx["isControlled && isOpen"],
     "isVisible": ctx => ctx["isVisible"],
     "isInteractive": ctx => ctx["isInteractive"]
   }

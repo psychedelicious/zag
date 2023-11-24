@@ -11,8 +11,17 @@ const {
 } = actions;
 const fetchMachine = createMachine({
   id: "dialog",
-  initial: ctx.open ? "open" : "closed",
-  context: {},
+  initial: [{
+    cond: "isOpen",
+    target: "open"
+  }, {
+    target: "closed"
+  }],
+  context: {
+    "isOpen": false,
+    "isControlled && isOpen": false,
+    "isControlled && !isOpen": false
+  },
   on: {
     UPDATE_CONTEXT: {
       actions: "updateContext"
@@ -21,19 +30,28 @@ const fetchMachine = createMachine({
   states: {
     open: {
       entry: ["checkRenderedElements"],
+      exit: ["restoreFocus"],
+      always: {
+        cond: "isControlled && isOpen",
+        actions: ["flushTransitionActions"]
+      },
       activities: ["trackDismissableElement", "trapFocus", "preventScroll", "hideContentBelow"],
       on: {
         CLOSE: {
           target: "closed",
-          actions: ["invokeOnClose", "restoreFocus"]
+          actions: ["invokeOnClose"]
         },
         TOGGLE: {
           target: "closed",
-          actions: ["invokeOnClose", "restoreFocus"]
+          actions: ["invokeOnClose"]
         }
       }
     },
     closed: {
+      always: {
+        cond: "isControlled && !isOpen",
+        actions: ["flushTransitionActions"]
+      },
       on: {
         OPEN: {
           target: "open",
@@ -54,5 +72,9 @@ const fetchMachine = createMachine({
       };
     })
   },
-  guards: {}
+  guards: {
+    "isOpen": ctx => ctx["isOpen"],
+    "isControlled && isOpen": ctx => ctx["isControlled && isOpen"],
+    "isControlled && !isOpen": ctx => ctx["isControlled && !isOpen"]
+  }
 });

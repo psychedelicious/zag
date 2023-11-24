@@ -199,6 +199,10 @@ export declare namespace StateMachine {
      */
     activities?: Activities<TContext, TState, TEvent>
     /**
+     * The transition that is alrways taken when entering the state node, or events are sent to the state node.
+     */
+    always?: Transitions<TContext, TState, TEvent>
+    /**
      * The mapping of event types to their potential transition(s).
      */
     on?: TransitionDefinitionMap<TContext, TState, TEvent>
@@ -343,7 +347,7 @@ export declare namespace StateMachine {
     /**
      * The initial state to start with
      */
-    initial?: TState["value"]
+    initial?: Transitions<TContext, TState, TEvent>
     /**
      * The mapping of state node keys to their state node configurations (recursive).
      */

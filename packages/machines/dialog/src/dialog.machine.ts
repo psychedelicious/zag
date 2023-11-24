@@ -1,5 +1,5 @@
 import { ariaHidden } from "@zag-js/aria-hidden"
-import { createMachine } from "@zag-js/core"
+import { createMachine, guards } from "@zag-js/core"
 import { trackDismissableElement } from "@zag-js/dismissable"
 import { nextTick, raf } from "@zag-js/dom-query"
 import { preventBodyScroll } from "@zag-js/remove-scroll"
@@ -8,12 +8,20 @@ import { createFocusTrap, type FocusTrap } from "focus-trap"
 import { dom } from "./dialog.dom"
 import type { MachineContext, MachineState, UserDefinedContext } from "./dialog.types"
 
+const { and, not } = guards
+
 export function machine(userContext: UserDefinedContext) {
   const ctx = compact(userContext)
   return createMachine<MachineContext, MachineState>(
     {
       id: "dialog",
-      initial: ctx.open ? "open" : "closed",
+      initial: [
+        {
+          guard: "isOpen",
+          target: "open",
+        },
+        { target: "closed" },
+      ],
 
       context: {
         role: "dialog",
@@ -37,19 +45,28 @@ export function machine(userContext: UserDefinedContext) {
       states: {
         open: {
           entry: ["checkRenderedElements"],
+          exit: ["restoreFocus"],
+          always: {
+            guard: and("isControlled", "isOpen"),
+            actions: ["flushTransitionActions"],
+          },
           activities: ["trackDismissableElement", "trapFocus", "preventScroll", "hideContentBelow"],
           on: {
             CLOSE: {
               target: "closed",
-              actions: ["invokeOnClose", "restoreFocus"],
+              actions: ["invokeOnClose"],
             },
             TOGGLE: {
               target: "closed",
-              actions: ["invokeOnClose", "restoreFocus"],
+              actions: ["invokeOnClose"],
             },
           },
         },
         closed: {
+          always: {
+            guard: and("isControlled", not("isOpen")),
+            actions: ["flushTransitionActions"],
+          },
           on: {
             OPEN: {
               target: "open",
@@ -64,6 +81,10 @@ export function machine(userContext: UserDefinedContext) {
       },
     },
     {
+      guards: {
+        isControlled: (ctx, evt) => !!ctx.$$controlled && !!evt._changed,
+        isOpen: (ctx) => !!ctx.open,
+      },
       activities: {
         trackDismissableElement(ctx, _evt, { send }) {
           const getContentEl = () => dom.getContentEl(ctx)
@@ -141,6 +162,13 @@ export function machine(userContext: UserDefinedContext) {
           raf(() => {
             const el = runIfFn(ctx.finalFocusEl) ?? dom.getTriggerEl(ctx)
             el?.focus({ preventScroll: true })
+          })
+        },
+        flushTransitionActions(...args) {
+          const [, evt, meta] = args
+          const { actions } = evt._transition ?? { actions: [] }
+          actions.forEach((action: string) => {
+            meta.getAction(action)?.(...args)
           })
         },
       },

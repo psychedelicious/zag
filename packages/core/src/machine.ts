@@ -39,6 +39,7 @@ export class Machine<
 
   public initialState: S.StateInfo<TContext, TState, TEvent> | undefined
   public initialContext: TContext
+  private initialTransition: any
 
   public id: string
 
@@ -91,6 +92,12 @@ export class Machine<
     // create mutatable state
     this.state = createProxy(this.config)
     this.initialContext = snapshot(this.state.context)
+
+    // determine initial transition and force it to be the initial state
+    this.initialTransition = this.determineTransition(this.config.initial, toEvent<TEvent>(ActionTypes.Init))
+    this.state.value = this.initialTransition?.target ?? ""
+
+    // transform context as needed (useful to ensure data consistency)
     this.transformContext(this.state.context)
 
     // created actions
@@ -177,11 +184,9 @@ export class Machine<
     }
 
     // start transition definition
-    const transition = {
-      target: target ?? this.config.initial,
-    }
-
+    const transition = target ? { target } : this.config.initial!
     const next = this.getNextStateInfo(transition, event)
+
     this.initialState = next
 
     this.performStateChangeEffects(this.state.value!, next, event)
@@ -763,6 +768,13 @@ export class Machine<
     if (changed) {
       this.performEntryEffects(next.target, event)
     }
+
+    // execute always actions
+    if (next.stateNode?.always) {
+      let nextState = this.getNextStateInfo(next.stateNode.always, event)
+      if (!nextState.transition || !nextState.changed) return
+      this.performStateChangeEffects(next.target, nextState, event)
+    }
   }
 
   private determineTransition = (transition: S.Transitions<TContext, TState, TEvent> | undefined, event: TEvent) => {
@@ -798,7 +810,7 @@ export class Machine<
   public transition = (state: TState["value"] | S.StateInfo<TContext, TState, TEvent> | null, evt: S.Event<TEvent>) => {
     const stateNode = isString(state) ? this.getStateNode(state) : state?.stateNode
 
-    const event = toEvent(evt)
+    let event = toEvent(evt)
 
     if (!stateNode && !this.config.on) {
       const msg =
@@ -812,7 +824,18 @@ export class Machine<
     const transitions: S.Transitions<TContext, TState, TEvent> =
       stateNode?.on?.[event.type] ?? this.config.on?.[event.type]
 
-    const next = this.getNextStateInfo(transitions, event)
+    let next = this.getNextStateInfo(transitions, event)
+
+    if (stateNode?.always) {
+      const __event = { ...event, _transition: next.transition, _changed: next.changed }
+      const __info = this.getNextStateInfo(stateNode?.always, __event)
+
+      if (__info.transition) {
+        next = __info
+        event = __event
+      }
+    }
+
     this.performStateChangeEffects(this.state.value!, next, event)
 
     return next.stateNode
